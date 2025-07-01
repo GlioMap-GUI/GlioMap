@@ -73,7 +73,7 @@ textLines2 = {
     'HELP';
     
 };
-commonURL2 = 'https://ahs.pdn.ac.lk/';
+commonURL2 = 'https://gliomap-gui.github.io/manuscript.html';
 
 
 fontSizes2 = [30, 14,];
@@ -1502,6 +1502,12 @@ uicontrol('Style', 'pushbutton', 'String', 'Save Results', ...
           'Position', [1330, 50, 80, 30], 'Callback', @saveSkullStripResults, ...
           'BackgroundColor', [0.8 0.9 0.8]);
     
+% masking
+maskingBtn = uicontrol('Style', 'pushbutton', 'String', 'Masking', ...
+    'Position',[1330, 10, 80, 30],'BackgroundColor', [0.6 0.9 0.8], ... 
+    'Callback', @openMaskingWindow);
+
+
 
 text(-2.15, -0.16, 'GlioMap', ...
     'FontSize', 30, ...
@@ -2533,5 +2539,598 @@ function saveSkullStripResults(~, ~)
             [filename, pathname] = uiputfile('*.mat', 'Save as MAT file');
             if filename == 0, return; end
             saveAsMAT(data.skullStrippedVolume, data.brainMasks, fullfile(pathname, filename));
+    end
+end
+
+%% masking
+
+function openMaskingWindow(~, ~)
+    % Create masking window
+    maskingFig = figure('Name', 'Masking Tool', 'NumberTitle', 'off', ...
+                       'Position', [400, 200, 950, 500], 'Color', [0.6 0.82 0.89], ...
+                       'MenuBar', 'none', 'ToolBar', 'none');
+    
+    % Left side axes for T1 sequence
+    axLeft = axes('Parent', maskingFig, 'Units', 'pixels', ...
+                  'Position', [50, 100, 350, 350], 'Color', [0.5 0.5 0.5]);
+    title(axLeft, 'T1 MRI Sequence');
+    
+    % Right side axes for second sequence
+    axRight = axes('Parent', maskingFig, 'Units', 'pixels', ...
+                   'Position', [450, 100, 350, 350], 'Color', [0.5 0.5 0.5]);
+    title(axRight, 'Second Sequence');
+    
+    % Load T1 button
+    uicontrol('Style', 'pushbutton', 'String', 'Load T1', ...
+              'Position', [825, 400, 100, 30], 'Callback', @loadT1Sequence);
+    
+    % Load second sequence button
+    uicontrol('Style', 'pushbutton', 'String', 'Load Sequence', ...
+              'Position', [825, 360, 100, 30], 'Callback', @loadSecondSequence);
+    
+    % Rotate buttons
+    uicontrol('Style', 'pushbutton', 'String', 'Rotate T1 90°', ...
+              'Position', [825, 320, 100, 30], 'Callback', @rotateT1);
+    
+    uicontrol('Style', 'pushbutton', 'String', 'Rotate Seq 90°', ...
+              'Position', [825, 280, 100, 30], 'Callback', @rotateSecond);
+% masking
+    uicontrol('Style', 'pushbutton', 'String', 'Apply Mask', ...
+          'Position', [825, 240, 100, 30], 'Callback', @applyMask, ...
+          'BackgroundColor', [0.8 0.9 0.8]);
+    
+uicontrol('Style', 'pushbutton', 'String', 'Save Masking', ...
+          'Position', [825, 200, 100, 30], 'Callback', @saveMaskingResults, ...
+          'BackgroundColor', [0.9 0.8 0.8]);
+
+
+    % Initialize masking data
+    maskingData.t1Volume = [];
+    maskingData.secondVolume = [];
+    maskingData.currentSlice = 1;
+    maskingData.t1Rotation = 0;
+    maskingData.secondRotation = 0;
+    maskingData.axLeft = axLeft;
+    maskingData.axRight = axRight;
+    guidata(maskingFig, maskingData);
+    
+    % Set scroll wheel function
+    set(maskingFig, 'WindowScrollWheelFcn', @scrollMaskingSlices);
+    
+    % Nested functions
+    function loadT1Sequence(~, ~)
+        fileFormats = {
+            '*.nii;*.nii.gz', 'NIfTI Files (*.nii, *.nii.gz)';
+            '*.mhd;*.mha', 'MetaImage Files (*.mhd, *.mha)';
+            '*.nrrd;*.nhdr', 'NRRD Files (*.nrrd, *.nhdr)';
+            '*.dcm;*.dicom', 'DICOM Files (*.dcm, *.dicom)';
+            '*.hdr;*.img', 'Analyze Files (*.hdr, *.img)';
+            '*.mgz;*.mgh', 'FreeSurfer Files (*.mgz, *.mgh)';
+            '*.gipl;*.gipl.gz', 'GIPL Files (*.gipl, *.gipl.gz)';
+            '*.vtk;*.vti;*.vtp;*.vtu', 'VTK Files (*.vtk, *.vti, *.vtp, *.vtu)';
+            '*.mnc;*.minc', 'MINC Files (*.mnc, *.minc)';
+            '*.pic', 'PIC Files (*.pic)';
+            '*.lsm', 'LSM Files (*.lsm)';
+            '*.tiff;*.tif', 'TIFF Files (*.tiff, *.tif)';
+            '*.png;*.jpg;*.jpeg;*.bmp', 'Image Files (*.png, *.jpg, *.jpeg, *.bmp)';
+            '*.*', 'All Files (*.*)'
+        };
+        
+        [filename, pathname] = uigetfile(fileFormats, 'Select T1 MRI file');
+        if filename ~= 0
+            try
+                maskingData = guidata(maskingFig);
+                fullPath = fullfile(pathname, filename);
+                
+                % Load volume using niftiread or your existing method
+                if contains(lower(filename), '.nii')
+                    maskingData.t1Volume = niftiread(fullPath);
+                elseif contains(lower(filename), '.dcm') || contains(lower(filename), '.dicom')
+                    maskingData.t1Volume = dicomread(fullPath);
+                else
+                    % Try niftiread as default
+                    maskingData.t1Volume = niftiread(fullPath);
+                end
+                
+                guidata(maskingFig, maskingData);
+                updateDisplay();
+            catch ME
+                errordlg(['Error loading T1 file: ' ME.message]);
+            end
+        end
+    end
+    
+    function loadSecondSequence(~, ~)
+        fileFormats = {
+            '*.nii;*.nii.gz', 'NIfTI Files (*.nii, *.nii.gz)';
+            '*.mhd;*.mha', 'MetaImage Files (*.mhd, *.mha)';
+            '*.nrrd;*.nhdr', 'NRRD Files (*.nrrd, *.nhdr)';
+            '*.dcm;*.dicom', 'DICOM Files (*.dcm, *.dicom)';
+            '*.hdr;*.img', 'Analyze Files (*.hdr, *.img)';
+            '*.mgz;*.mgh', 'FreeSurfer Files (*.mgz, *.mgh)';
+            '*.gipl;*.gipl.gz', 'GIPL Files (*.gipl, *.gipl.gz)';
+            '*.vtk;*.vti;*.vtp;*.vtu', 'VTK Files (*.vtk, *.vti, *.vtp, *.vtu)';
+            '*.mnc;*.minc', 'MINC Files (*.mnc, *.minc)';
+            '*.pic', 'PIC Files (*.pic)';
+            '*.lsm', 'LSM Files (*.lsm)';
+            '*.tiff;*.tif', 'TIFF Files (*.tiff, *.tif)';
+            '*.png;*.jpg;*.jpeg;*.bmp', 'Image Files (*.png, *.jpg, *.jpeg, *.bmp)';
+            '*.*', 'All Files (*.*)'
+        };
+        
+        [filename, pathname] = uigetfile(fileFormats, 'Select second MRI file');
+        if filename ~= 0
+            try
+                maskingData = guidata(maskingFig);
+                fullPath = fullfile(pathname, filename);
+                
+                % Load volume using niftiread or your existing method
+                if contains(lower(filename), '.nii')
+                    maskingData.secondVolume = niftiread(fullPath);
+                elseif contains(lower(filename), '.dcm') || contains(lower(filename), '.dicom')
+                    maskingData.secondVolume = dicomread(fullPath);
+                else
+                    % Try niftiread as default
+                    maskingData.secondVolume = niftiread(fullPath);
+                end
+                
+                guidata(maskingFig, maskingData);
+                updateDisplay();
+            catch ME
+                errordlg(['Error loading second file: ' ME.message]);
+            end
+        end
+    end
+    
+    function rotateT1(~, ~)
+        maskingData = guidata(maskingFig);
+        if ~isempty(maskingData.t1Volume)
+            maskingData.t1Rotation = mod(maskingData.t1Rotation + 90, 360);
+            guidata(maskingFig, maskingData);
+            updateDisplay();
+        end
+    end
+    
+    function rotateSecond(~, ~)
+        maskingData = guidata(maskingFig);
+        if ~isempty(maskingData.secondVolume)
+            maskingData.secondRotation = mod(maskingData.secondRotation + 90, 360);
+            guidata(maskingFig, maskingData);
+            updateDisplay();
+        end
+    end
+    
+   function updateDisplay()
+    maskingData = guidata(maskingFig);
+    
+    % Display T1 volume
+    if ~isempty(maskingData.t1Volume)
+        slice = maskingData.t1Volume(:,:,maskingData.currentSlice);
+        slice = rot90(slice, maskingData.t1Rotation/90);
+        imshow(slice, [], 'Parent', maskingData.axLeft);
+        title(maskingData.axLeft, ['T1 MRI Sequence (Slice ' num2str(maskingData.currentSlice) ')']);
+    end
+    
+    % Display second volume or overlay if available
+    if ~isempty(maskingData.secondVolume)
+        if isfield(maskingData, 'overlayVolume') && ~isempty(maskingData.overlayVolume)
+            % Show overlay with mask highlighting
+            if maskingData.currentSlice <= size(maskingData.overlayVolume, 4)
+                overlaySlice = maskingData.overlayVolume(:,:,:,maskingData.currentSlice);
+                overlaySlice = rot90(overlaySlice, maskingData.secondRotation/90);
+                imshow(overlaySlice, [], 'Parent', maskingData.axRight);
+                title(maskingData.axRight, ['Masked Sequence (Slice ' num2str(maskingData.currentSlice) ')']);
+            end
+        else
+            % Show original second sequence
+            slice = maskingData.secondVolume(:,:,maskingData.currentSlice);
+            slice = rot90(slice, maskingData.secondRotation/90);
+            imshow(slice, [], 'Parent', maskingData.axRight);
+            title(maskingData.axRight, ['Second Sequence (Slice ' num2str(maskingData.currentSlice) ')']);
+        end
+    end
+   end
+
+%%
+
+function saveMaskingResults(src, ~)
+    % Get the figure handle from the source
+    hFig = ancestor(src, 'figure');
+    maskingData = guidata(hFig);
+    
+    % Check if masking has been applied
+    if isempty(maskingData.maskedVolume) || isempty(maskingData.generatedMask)
+        errordlg('Please apply masking first before saving');
+        return;
+    end
+    
+    % File format options for saving
+    saveFormats = {
+        '*.nii', 'NIfTI Files (*.nii)';
+        '*.nii.gz', 'Compressed NIfTI Files (*.nii.gz)';
+        '*.dcm', 'DICOM Files (*.dcm)';
+        '*.mat', 'MATLAB Files (*.mat)';
+        '*.mhd', 'MetaImage Files (*.mhd)';
+        '*.nrrd', 'NRRD Files (*.nrrd)';
+        '*.tiff', 'TIFF Stack (*.tiff)';
+        '*.png', 'PNG Slices (*.png)';
+        '*.jpg', 'JPEG Slices (*.jpg)';
+    };
+    
+    % Let user choose what to save
+    choice = questdlg('What would you like to save?', 'Save Options', ...
+                     'Masked Volume', 'Binary Mask', 'Both', 'Both');
+    
+    if strcmp(choice, '') % User cancelled
+        return;
+    end
+    
+    try
+        % Save based on user choice
+        switch choice
+            case 'Masked Volume'
+                saveSingleVolume(maskingData.maskedVolume, 'masked_volume', saveFormats);
+                
+            case 'Binary Mask'
+                saveSingleVolume(maskingData.generatedMask, 'binary_mask', saveFormats);
+                
+            case 'Both'
+                % Save masked volume
+                saveSingleVolume(maskingData.maskedVolume, 'masked_volume', saveFormats);
+                % Save binary mask
+                saveSingleVolume(maskingData.generatedMask, 'binary_mask', saveFormats);
+        end
+        
+        msgbox('Masking results saved successfully!', 'Success');
+        
+    catch ME
+        errordlg(['Error saving masking results: ' ME.message]);
+    end
+    
+    function saveSingleVolume(volume, defaultName, formats)
+        % Get filename and format from user
+        [filename, pathname, filterindex] = uiputfile(formats, ...
+            ['Save ' strrep(defaultName, '_', ' ')], defaultName);
+        
+        if filename == 0 % User cancelled
+            return;
+        end
+        
+        fullPath = fullfile(pathname, filename);
+        selectedFormat = formats{filterindex, 1};
+        
+        % Save based on selected format
+        switch selectedFormat
+            case '*.nii'
+                % Save as NIfTI
+                niftiwrite(volume, fullPath);
+                
+            case '*.nii.gz'
+                % Save as compressed NIfTI
+                niftiwrite(volume, fullPath, 'Compressed', true);
+                
+            case '*.dcm'
+                % Save as DICOM series
+                saveAsDICOM(volume, fullPath);
+                
+            case '*.mat'
+                % Save as MATLAB file
+                save(fullPath, 'volume', '-v7.3');
+                
+            case '*.mhd'
+                % Save as MetaImage (basic implementation)
+                saveAsMetaImage(volume, fullPath);
+                
+            case '*.nrrd'
+                % Save as NRRD (basic implementation)
+                saveAsNRRD(volume, fullPath);
+                
+            case '*.tiff'
+                % Save as TIFF stack
+                saveAsTiffStack(volume, fullPath);
+                
+            case {'*.png', '*.jpg'}
+                % Save as individual slice images
+                saveAsImageSlices(volume, fullPath, selectedFormat);
+        end
+    end
+    
+    function saveAsDICOM(volume, filepath)
+        % Save as DICOM series
+        [pathstr, name, ~] = fileparts(filepath);
+        
+        % Create directory for DICOM series
+        dicomDir = fullfile(pathstr, [name '_dicom_series']);
+        if ~exist(dicomDir, 'dir')
+            mkdir(dicomDir);
+        end
+        
+        % Prepare volume for DICOM (ensure proper scaling)
+        volume = double(volume);
+        
+        
+        if max(volume(:)) <= 1 && min(volume(:)) >= 0
+            
+            volume = volume * 4095; 
+        elseif max(volume(:)) <= 255 && min(volume(:)) >= 0
+            
+            volume = volume * 16;
+        end
+        
+        % Ensure data is in uint16 range for DICOM
+        volume = uint16(max(0, min(65535, volume)));
+        
+        % Generate basic DICOM metadata
+        studyUID = dicomuid;
+        seriesUID = dicomuid;
+        frameOfReferenceUID = dicomuid;
+        
+        % Get current date and time
+        currentDate = datestr(now, 'yyyymmdd');
+        currentTime = datestr(now, 'HHMMSS');
+        
+        % Save each slice as a separate DICOM file
+        for i = 1:size(volume, 3)
+            slice = volume(:,:,i);
+            
+            % Create DICOM filename
+            dicomFilename = fullfile(dicomDir, sprintf('slice_%04d.dcm', i));
+            
+            % Create DICOM metadata structure
+            metadata = struct();
+            metadata.PatientName = 'Anonymous';
+            metadata.PatientID = 'MASK_001';
+            metadata.StudyDate = currentDate;
+            metadata.StudyTime = currentTime;
+            metadata.SeriesDate = currentDate;
+            metadata.SeriesTime = currentTime;
+            metadata.AcquisitionDate = currentDate;
+            metadata.AcquisitionTime = currentTime;
+            metadata.ContentDate = currentDate;
+            metadata.ContentTime = currentTime;
+            metadata.StudyInstanceUID = studyUID;
+            metadata.SeriesInstanceUID = seriesUID;
+            metadata.SOPInstanceUID = dicomuid;
+            metadata.FrameOfReferenceUID = frameOfReferenceUID;
+            metadata.StudyDescription = 'Masked Volume Analysis';
+            metadata.SeriesDescription = ['Masked Volume - ' name];
+            metadata.Modality = 'OT'; % Other
+            metadata.Manufacturer = 'MATLAB';
+            metadata.InstitutionName = 'Research';
+            metadata.StudyID = '1';
+            metadata.SeriesNumber = 1;
+            metadata.InstanceNumber = i;
+            metadata.SliceLocation = i;
+            metadata.ImagePositionPatient = [0, 0, i-1];
+            metadata.ImageOrientationPatient = [1, 0, 0, 0, 1, 0];
+            metadata.PixelSpacing = [1.0, 1.0];
+            metadata.SliceThickness = 1.0;
+            metadata.Rows = size(slice, 1);
+            metadata.Columns = size(slice, 2);
+            metadata.BitsAllocated = 16;
+            metadata.BitsStored = 16;
+            metadata.HighBit = 15;
+            metadata.PixelRepresentation = 0;
+            metadata.SamplesPerPixel = 1;
+            metadata.PhotometricInterpretation = 'MONOCHROME2';
+            metadata.RescaleIntercept = 0;
+            metadata.RescaleSlope = 1;
+            metadata.WindowCenter = double(max(slice(:))/2);
+            metadata.WindowWidth = double(max(slice(:)));
+            
+            try
+                % Write DICOM file
+                dicomwrite(slice, dicomFilename, metadata);
+            catch ME
+                warning('Failed to write DICOM slice %d: %s', i, ME.message);
+            end
+        end
+        
+        msgbox(['DICOM series saved to: ' dicomDir], 'DICOM Series Saved');
+    end
+    
+    function saveAsMetaImage(volume, filepath)
+        % Basic MetaImage format save
+        [pathstr, name, ~] = fileparts(filepath);
+        mhdFile = fullfile(pathstr, [name '.mhd']);
+        rawFile = fullfile(pathstr, [name '.raw']);
+        
+        % Write header file
+        fid = fopen(mhdFile, 'w');
+        fprintf(fid, 'ObjectType = Image\n');
+        fprintf(fid, 'NDims = 3\n');
+        fprintf(fid, 'BinaryData = True\n');
+        fprintf(fid, 'BinaryDataByteOrderMSB = False\n');
+        fprintf(fid, 'CompressedData = False\n');
+        fprintf(fid, 'DimSize = %d %d %d\n', size(volume));
+        fprintf(fid, 'ElementType = MET_DOUBLE\n');
+        fprintf(fid, 'ElementDataFile = %s\n', [name '.raw']);
+        fclose(fid);
+        
+        % Write raw data
+        fid = fopen(rawFile, 'wb');
+        fwrite(fid, volume, 'double');
+        fclose(fid);
+    end
+    
+    function saveAsNRRD(volume, filepath)
+        % Basic NRRD format save
+        fid = fopen(filepath, 'wb');
+        fprintf(fid, 'NRRD0001\n');
+        fprintf(fid, 'type: double\n');
+        fprintf(fid, 'dimension: 3\n');
+        fprintf(fid, 'sizes: %d %d %d\n', size(volume));
+        fprintf(fid, 'encoding: raw\n');
+        fprintf(fid, '\n');
+        fwrite(fid, volume, 'double');
+        fclose(fid);
+    end
+    
+    function saveAsTiffStack(volume, filepath)
+        % Normalize volume for TIFF
+        volume = double(volume);
+        volume = (volume - min(volume(:))) / (max(volume(:)) - min(volume(:)));
+        volume = uint16(volume * 65535);
+        
+        % Save as TIFF stack
+        for i = 1:size(volume, 3)
+            if i == 1
+                imwrite(volume(:,:,i), filepath, 'tiff', 'WriteMode', 'overwrite');
+            else
+                imwrite(volume(:,:,i), filepath, 'tiff', 'WriteMode', 'append');
+            end
+        end
+    end
+    
+    function saveAsImageSlices(volume, filepath, format)
+        [pathstr, name, ~] = fileparts(filepath);
+        
+        % Normalize volume for image saving
+        volume = double(volume);
+        if max(volume(:)) > min(volume(:))
+            volume = (volume - min(volume(:))) / (max(volume(:)) - min(volume(:)));
+        end
+        
+        % Create directory for slices
+        sliceDir = fullfile(pathstr, [name '_slices']);
+        if ~exist(sliceDir, 'dir')
+            mkdir(sliceDir);
+        end
+        
+        % Save each slice
+        for i = 1:size(volume, 3)
+            slice = volume(:,:,i);
+            sliceFilename = fullfile(sliceDir, sprintf('%s_slice_%03d%s', ...
+                name, i, strrep(format, '*', '')));
+            
+            if contains(format, 'png')
+                imwrite(slice, sliceFilename, 'png');
+            else
+                imwrite(slice, sliceFilename, 'jpg', 'Quality', 95);
+            end
+        end
+        
+        msgbox(['Slices saved to: ' sliceDir], 'Slices Saved');
+    end
+end
+    
+    function scrollMaskingSlices(src, event)
+        maskingData = guidata(src);
+        
+        % Check if we have any volume loaded
+        if isempty(maskingData.t1Volume) && isempty(maskingData.secondVolume)
+            return;
+        end
+        
+        % Get number of slices from whichever volume is loaded
+        if ~isempty(maskingData.t1Volume)
+            numSlices = size(maskingData.t1Volume, 3);
+        elseif ~isempty(maskingData.secondVolume)
+            numSlices = size(maskingData.secondVolume, 3);
+        else
+            return;
+        end
+        
+        % Update slice based on scroll direction
+        if event.VerticalScrollCount > 0
+            % Scroll down - next slice
+            maskingData.currentSlice = min(maskingData.currentSlice + 1, numSlices);
+        else
+            % Scroll up - previous slice
+            maskingData.currentSlice = max(maskingData.currentSlice - 1, 1);
+        end
+        
+        guidata(src, maskingData);
+        updateDisplay();
+    end
+end
+
+%% 
+
+function applyMask(src, ~)
+    % Get the figure handle from the source
+    hFig = ancestor(src, 'figure');
+    maskingData = guidata(hFig);
+    
+    % Check if both volumes are loaded
+    if isempty(maskingData.t1Volume) || isempty(maskingData.secondVolume)
+        errordlg('Please load both T1 and second sequence first');
+        return;
+    end
+    
+    try
+        % Generate mask from T1 sequence using Otsu thresholding for ALL slices
+        t1Vol = double(maskingData.t1Volume);
+        secondVol = double(maskingData.secondVolume);
+        
+        % Ensure both volumes have same dimensions
+        minSlices = min(size(t1Vol, 3), size(secondVol, 3));
+        
+        % Create binary mask for each slice
+        mask = zeros(size(t1Vol, 1), size(t1Vol, 2), minSlices);
+        maskedVolume = zeros(size(secondVol, 1), size(secondVol, 2), minSlices);
+        overlayVolume = zeros(size(secondVol, 1), size(secondVol, 2), 3, minSlices);
+        
+        % Process all slices
+        for i = 1:minSlices
+            t1Slice = t1Vol(:,:,i);
+            secondSlice = secondVol(:,:,i);
+            
+            if max(t1Slice(:)) > 0
+                % Normalize T1 slice for mask generation
+                t1Slice = (t1Slice - min(t1Slice(:))) / (max(t1Slice(:)) - min(t1Slice(:)));
+                % Apply Otsu threshold
+                level = graythresh(t1Slice);
+                mask(:,:,i) = imbinarize(t1Slice, level);
+                
+                % Apply mask to second sequence slice
+                maskedVolume(:,:,i) = secondSlice .* mask(:,:,i);
+                
+                % Create overlay with light yellow masking
+                % Normalize second slice for display
+                if max(secondSlice(:)) > 0
+                    normalizedSlice = (secondSlice - min(secondSlice(:))) / (max(secondSlice(:)) - min(secondSlice(:)));
+                else
+                    normalizedSlice = secondSlice;
+                end
+                
+                % Create RGB overlay
+                overlayVolume(:,:,1,i) = normalizedSlice; % Red channel
+                overlayVolume(:,:,2,i) = normalizedSlice; % Green channel  
+                overlayVolume(:,:,3,i) = normalizedSlice; % Blue channel (grayscale base)
+                
+                % Add light yellow highlight where mask is applied
+                maskRegion = mask(:,:,i);
+                overlayVolume(:,:,1,i) = overlayVolume(:,:,1,i) + 0.3 * maskRegion; % Add yellow (red component)
+                overlayVolume(:,:,2,i) = overlayVolume(:,:,2,i) + 0.3 * maskRegion; % Add yellow (green component)
+                
+                % Clamp values to [0,1]
+                overlayVolume(:,:,:,i) = min(overlayVolume(:,:,:,i), 1);
+            end
+        end
+        
+        % Store the results
+        maskingData.maskedVolume = maskedVolume;
+        maskingData.generatedMask = mask;
+        maskingData.overlayVolume = overlayVolume;
+        maskingData.currentSlice = min(maskingData.currentSlice, minSlices);
+        guidata(hFig, maskingData);
+        
+        % Display the current slice with overlay
+        updateMaskDisplay();
+        
+        msgbox(['Mask applied successfully to all ' num2str(minSlices) ' slices!'], 'Success');
+        
+    catch ME
+        errordlg(['Error applying mask: ' ME.message]);
+    end
+    
+    function updateMaskDisplay()
+        if maskingData.currentSlice <= size(maskingData.overlayVolume, 4)
+            overlaySlice = maskingData.overlayVolume(:,:,:,maskingData.currentSlice);
+            overlaySlice = rot90(overlaySlice, maskingData.secondRotation/90);
+            imshow(overlaySlice, [], 'Parent', maskingData.axRight);
+            title(maskingData.axRight, ['Masked Sequence (Slice ' num2str(maskingData.currentSlice) ')']);
+        end
     end
 end
