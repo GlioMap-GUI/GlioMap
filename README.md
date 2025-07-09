@@ -31,7 +31,6 @@ Requirements
 
 - MATLAB (R2020b or newer recommended)
 - Image Processing Toolbox
-- Statistics and Machine Learning Toolbox
 
 Installation
 ------------
@@ -87,7 +86,6 @@ Limitations
 -----------
 
 - Only supports 2D slice-by-slice visualization.
-- Skull stripping performs best on T1-weighted MRI.
 - Does not support 3D feature extraction (planned for future versions).
 
 Developers
