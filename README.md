@@ -12,8 +12,8 @@ Key Features
 - Skull Stripping using a simplified BET (Brain Extraction Tool) method.
 - Segmentation using fuzzy FMC (Fuzzy Membership Clustering) or manual tools (drawing, ROI).
 - Feature Extraction:
-  - Over 100 IBSI-compliant radiomic features.
-  - 33 morphological features related to shape and structure.
+  - 100 radiomic features.
+  - 33 morphological features.
 - Multi-format Image Support: NIfTI, DICOM, MHA, PNG, JPG, etc.
 
 Interface Overview
@@ -91,11 +91,11 @@ Limitations
 Developers
 ----------
 
-- Isira Senanayaka – thilanga8.314@gmail.com
-- T. Sangavi – tsangavi291@gmail.com
-- Dr. Mohan Jayathilaka – jayatiml@gmail.com
+- Isira Senanayaka – ash19rad031@ahs.pdn.ac.lk
+- T. Sangavi – ash19rad030@ahs.pdn.ac.lk
+- Dr. Mohan Jayathilaka – jayatiml@pdn.ac.lk
 - Prof. P.B. Hevavithana – padmabh@gmail.com
-- Dr. Sunil Kulathunga - 
+- Dr. Sunil Kulathunga - kulatunga@ahs.pdn.ac.lk
 
 License
 -------
