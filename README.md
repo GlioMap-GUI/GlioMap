@@ -57,7 +57,7 @@ User Manual
 -----------
 
 Detailed instructions and visual walkthroughs are available on the GlioMap Documentation Site:
-https://gliomap-gui.github.io/index.html
+[https://gliomap-gui.github.io/index.html](https://gliomap-gui.github.io/manuscript.html)
 
 Use Case Example
 ----------------
